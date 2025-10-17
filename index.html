@@ -278,7 +278,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot, updateDoc, where, query, addDoc, deleteDoc, documentId } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot, updateDoc, where, query, addDoc, deleteDoc, documentId, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 
         const firebaseConfig = {
@@ -436,7 +436,7 @@
         }
         
         function listenForActiveCompetition() {
-            const q = query(collection(db, "competitions"), where("status", "!=", "finished"));
+            const q = query(collection(db, "competitions"), orderBy("createdAt", "desc"), limit(1));
             if (competitionUnsubscribe) competitionUnsubscribe();
             competitionUnsubscribe = onSnapshot(q, (snapshot) => {
                 if(!snapshot.empty) {
@@ -462,9 +462,11 @@
             
             const startBtn = document.getElementById('start-competition-btn');
             const nextRoundBtn = document.getElementById('next-round-btn');
+            const endBtn = document.getElementById('end-competition-btn');
             
             startBtn.classList.add('hidden');
             nextRoundBtn.classList.add('hidden');
+            endBtn.classList.remove('hidden');
 
             document.getElementById('active-competition-status').textContent = `Status: ${competition.status.toUpperCase()}`;
             renderBracket(document.getElementById('admin-bracket-view'), competition, true);
@@ -484,7 +486,16 @@
                 document.getElementById('active-competition-status').innerHTML = `Status: FINALIZADO <br> Vencedor: <span class="font-bold text-yellow-500">${finalWinner.name}</span>`;
             }
 
-            document.getElementById('end-competition-btn').onclick = async () => { await updateDoc(doc(db, "competitions", competition.id), { status: 'finished' }); }
+            endBtn.onclick = async () => {
+                if (competition.status !== 'finished') {
+                    if (confirm('Tem certeza que deseja finalizar esta competição prematuramente?')) {
+                        await updateDoc(doc(db, "competitions", competition.id), { status: 'finished' });
+                    }
+                } else {
+                    await deleteDoc(doc(db, "competitions", competition.id));
+                }
+            };
+            endBtn.textContent = competition.status === 'finished' ? 'Arquivar Competição e Limpar' : 'Finalizar Competição';
         }
         
         document.getElementById('save-challenge-btn').addEventListener('click', async () => {
@@ -539,6 +550,19 @@
             const challengesData = challengesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             if (challengesData.length === 0) { alert("Erro: nenhum dos desafios selecionados foi encontrado."); return; }
 
+            let usedChallengeIds = [];
+            const pickUniqueChallenge = () => {
+                let availableChallenges = challengesData.filter(c => !usedChallengeIds.includes(c.id));
+                if (availableChallenges.length === 0) {
+                    console.warn("Todos os desafios únicos foram usados. Reutilizando desafios.");
+                    usedChallengeIds = []; // Reseta a lista para reutilização
+                    availableChallenges = challengesData;
+                }
+                const chosen = availableChallenges[Math.floor(Math.random() * availableChallenges.length)];
+                usedChallengeIds.push(chosen.id);
+                return chosen;
+            };
+
             const teams = Object.values(selectedUsers.reduce((acc, user) => { if (!acc[user.team]) { acc[user.team] = { name: user.team, members: [] }; } acc[user.team].members.push({ uid: user.uid, name: user.name }); return acc; }, {}));
             if (teams.length < 2) { alert("É necessário ter pelo menos duas equipes/competidores distintos."); return; }
 
@@ -551,19 +575,20 @@
                     team2: shuffledTeams[i + 1] || null, 
                     winner: null, 
                     submission: null,
-                    challenge: challengeMode === 'match' ? challengesData[Math.floor(Math.random() * challengesData.length)] : null,
+                    challenge: challengeMode === 'match' ? pickUniqueChallenge() : null,
                 });
             }
 
             const firstRound = {
                 matches: firstRoundMatches,
-                challenge: challengeMode === 'round' ? challengesData[Math.floor(Math.random() * challengesData.length)] : null,
+                challenge: challengeMode === 'round' ? pickUniqueChallenge() : null,
             };
             
             const competitionData = { 
                 name: competitionName, 
-                challenge: challengeMode === 'competition' ? challengesData[Math.floor(Math.random() * challengesData.length)] : null,
+                challenge: challengeMode === 'competition' ? pickUniqueChallenge() : null,
                 challengePool: selectedChallengesIds,
+                usedChallengeIds: usedChallengeIds,
                 challengeMode: challengeMode,
                 status: 'ready', 
                 isRoundComplete: false,
@@ -580,28 +605,22 @@
         // --- LÓGICA DO PAINEL DO USUÁRIO ---
         function loadUserDashboard() {
             document.getElementById('user-welcome').textContent = `Bem-vindo, ${userProfile.name}!`;
-            const q = query(collection(db, "competitions"), where("status", "!=", "finished"));
+            const q = query(collection(db, "competitions"), orderBy("createdAt", "desc"), limit(1));
             
             if (competitionUnsubscribe) competitionUnsubscribe();
 
-            const finishedQuery = query(collection(db, "competitions"), where("status", "==", "finished"));
-            
-            // Listener para competições ativas
-            const activeUnsubscribe = onSnapshot(q, (snapshot) => {
+            competitionUnsubscribe = onSnapshot(q, (snapshot) => {
                 const waitingDiv = document.getElementById('waiting-for-competition');
                 const challengeDiv = document.getElementById('challenge-active');
                 const finishedView = document.getElementById('finished-view');
 
+                waitingDiv.classList.add('hidden');
+                challengeDiv.classList.add('hidden');
+                finishedView.classList.add('hidden');
+
                 if (snapshot.empty) {
-                    // Se não há competição ativa, checamos se há alguma finalizada
-                    getDocs(finishedQuery).then(finishedSnapshot => {
-                        if (finishedSnapshot.empty) {
-                             waitingDiv.classList.remove('hidden'); 
-                             challengeDiv.classList.add('hidden'); 
-                             finishedView.classList.add('hidden');
-                             document.getElementById('user-bracket-content').innerHTML = '<p class="text-center text-gray-500">Nenhuma competição ativa.</p>';
-                        }
-                    });
+                    waitingDiv.classList.remove('hidden');
+                    document.getElementById('user-bracket-content').innerHTML = '<p class="text-center text-gray-500">Nenhuma competição no momento.</p>';
                     return; 
                 }
                 
@@ -609,74 +628,20 @@
                 if (competition.bracket && typeof competition.bracket === 'string') {
                     competition.bracket = JSON.parse(competition.bracket);
                 }
+
+                const isParticipant = competition.participants.some(p => p.uid === currentUser.uid);
+                if (!isParticipant) {
+                    waitingDiv.classList.remove('hidden');
+                    document.getElementById('user-bracket-content').innerHTML = '<p class="text-center text-gray-500">Você não está participando da competição atual.</p>';
+                    return;
+                }
                 
-                finishedView.classList.add('hidden'); // Esconde a tela de finalizado se uma competição estiver ativa
                 renderBracket(document.getElementById('user-bracket-content'), competition, false);
                 const myTeam = competition.teams.find(t => t.members.some(m => m.uid === currentUser.uid));
-                if (!myTeam) return;
                 
-                const currentRoundData = competition.bracket.rounds[competition.currentRound - 1];
-                const currentRoundMatches = currentRoundData?.matches || [];
-                const myMatch = currentRoundMatches.find(m => (m.team1 && m.team1.name === myTeam.name) || (m.team2 && m.team2.name === myTeam.name));
-                
-                if (competition.status === 'active' && myMatch && !myMatch.winner) {
-                    let challenge = null;
-                    if (competition.challengeMode === 'match') { challenge = myMatch.challenge; } 
-                    else if (competition.challengeMode === 'round') { challenge = currentRoundData.challenge; } 
-                    else { challenge = competition.challenge; }
-
-                    if (!challenge) { 
-                        console.error("Desafio não pôde ser determinado para a partida!", {challengeMode: competition.challengeMode, match: myMatch});
-                        waitingDiv.classList.remove('hidden');
-                        challengeDiv.classList.add('hidden');
-                        return; 
-                    }
-                    
-                    document.getElementById('answer-status').textContent = '';
-                    document.getElementById('user-mass').value = '';
-                    document.getElementById('user-volume').value = '';
-
-                    waitingDiv.classList.add('hidden'); 
-                    challengeDiv.classList.remove('hidden');
-                    document.getElementById('user-challenge-name').textContent = `Desafio: ${challenge.name}`;
-                    document.getElementById('user-challenge-material').textContent = `Material: ${challenge.material || 'Não especificado'}`;
-
-                    const downloadButton = document.getElementById('download-challenge-file');
-                    const challengeInstructions = document.querySelector('#challenge-active .text-lg.mb-6');
-                    const fileNameDisplay = document.getElementById('user-challenge-filename');
-
-                    if (challenge.fileUrl) {
-                        downloadButton.href = challenge.fileUrl;
-                        downloadButton.classList.remove('hidden');
-                        fileNameDisplay.textContent = `Arquivo: ${getFileNameFromUrl(challenge.fileUrl)}`;
-                        fileNameDisplay.classList.remove('hidden');
-                        challengeInstructions.textContent = 'Baixe o arquivo, encontre a massa e o volume e envie sua resposta.';
-                    } else {
-                        downloadButton.classList.add('hidden');
-                        fileNameDisplay.classList.add('hidden');
-                        challengeInstructions.textContent = 'Encontre a massa e o volume do desafio e envie sua resposta. Não há arquivo para este desafio.';
-                    }
-                } else {
-                    waitingDiv.classList.remove('hidden'); 
-                    challengeDiv.classList.add('hidden');
-                }
-            });
-
-            // Listener para competições finalizadas
-            const finishedUnsubscribe = onSnapshot(finishedQuery, (snapshot) => {
-                 if (!snapshot.empty) {
-                    const competition = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
-                    if (competition.bracket && typeof competition.bracket === 'string') {
-                        competition.bracket = JSON.parse(competition.bracket);
-                    }
-                    
-                    const myTeam = competition.teams.find(t => t.members.some(m => m.uid === currentUser.uid));
+                if (competition.status === 'finished') {
                     const finalWinner = competition.bracket.rounds[competition.bracket.rounds.length - 1].matches[0].winner;
-
-                    document.getElementById('waiting-for-competition').classList.add('hidden');
-                    document.getElementById('challenge-active').classList.add('hidden');
-                    document.getElementById('finished-view').classList.remove('hidden');
-                    
+                    finishedView.classList.remove('hidden');
                     const finishedTitle = document.getElementById('finished-title');
                     const finishedSubtitle = document.getElementById('finished-subtitle');
 
@@ -689,14 +654,50 @@
                         finishedSubtitle.textContent = `O vencedor foi ${finalWinner.name}.`;
                         finishedTitle.className = 'text-4xl font-bold text-gray-800 mb-4';
                     }
-                    renderBracket(document.getElementById('user-bracket-content'), competition, false);
-                 }
-            });
+                } else { // Status 'ready' or 'active'
+                    if (!myTeam) return;
+                
+                    const currentRoundData = competition.bracket.rounds[competition.currentRound - 1];
+                    const currentRoundMatches = currentRoundData?.matches || [];
+                    const myMatch = currentRoundMatches.find(m => (m.team1 && m.team1.name === myTeam.name) || (m.team2 && m.team2.name === myTeam.name));
+                    
+                    if (competition.status === 'active' && myMatch && !myMatch.winner) {
+                        let challenge = null;
+                        if (competition.challengeMode === 'match') { challenge = myMatch.challenge; } 
+                        else if (competition.challengeMode === 'round') { challenge = currentRoundData.challenge; } 
+                        else { challenge = competition.challenge; }
 
-            competitionUnsubscribe = () => {
-                activeUnsubscribe();
-                finishedUnsubscribe();
-            };
+                        if (!challenge) { 
+                            console.error("Desafio não pôde ser determinado para a partida!", {challengeMode: competition.challengeMode, match: myMatch});
+                            waitingDiv.classList.remove('hidden');
+                            return; 
+                        }
+                        
+                        document.getElementById('answer-status').textContent = '';
+                        document.getElementById('user-mass').value = '';
+                        document.getElementById('user-volume').value = '';
+
+                        challengeDiv.classList.remove('hidden');
+                        document.getElementById('user-challenge-name').textContent = `Desafio: ${challenge.name}`;
+                        document.getElementById('user-challenge-material').textContent = `Material: ${challenge.material || 'Não especificado'}`;
+
+                        const downloadButton = document.getElementById('download-challenge-file');
+                        const fileNameDisplay = document.getElementById('user-challenge-filename');
+
+                        if (challenge.fileUrl) {
+                            downloadButton.href = challenge.fileUrl;
+                            downloadButton.classList.remove('hidden');
+                            fileNameDisplay.textContent = `Arquivo: ${getFileNameFromUrl(challenge.fileUrl)}`;
+                            fileNameDisplay.classList.remove('hidden');
+                        } else {
+                            downloadButton.classList.add('hidden');
+                            fileNameDisplay.classList.add('hidden');
+                        }
+                    } else {
+                        waitingDiv.classList.remove('hidden'); 
+                    }
+                }
+            });
         }
         
         document.getElementById('answer-form').addEventListener('submit', async (e) => {
@@ -770,11 +771,25 @@
             const currentRound = competition.bracket.rounds[competition.currentRound - 1];
             const winners = currentRound.matches.map(match => match.winner).filter(Boolean);
             
+            let usedChallengeIds = competition.usedChallengeIds || [];
+            
             let challengesData = [];
             if ((competition.challengeMode === 'round' || competition.challengeMode === 'match') && competition.challengePool?.length > 0) {
                 const challengesSnapshot = await getDocs(query(collection(db, "challenges"), where(documentId(), "in", competition.challengePool)));
                 challengesData = challengesSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
             }
+
+            const pickUniqueChallenge = () => {
+                let availableChallenges = challengesData.filter(c => !usedChallengeIds.includes(c.id));
+                if (availableChallenges.length === 0) {
+                    console.warn("Todos os desafios únicos foram usados. Reutilizando desafios.");
+                    usedChallengeIds = []; // Reseta a lista para reutilização
+                    availableChallenges = challengesData;
+                }
+                const chosen = availableChallenges[Math.floor(Math.random() * availableChallenges.length)];
+                usedChallengeIds.push(chosen.id);
+                return chosen;
+            };
 
             const nextRoundMatches = [];
             for (let i = 0; i < winners.length; i += 2) { 
@@ -784,13 +799,13 @@
                     team2: winners[i + 1] || null, 
                     winner: null, 
                     submission: null,
-                    challenge: (competition.challengeMode === 'match' && challengesData.length > 0) ? challengesData[Math.floor(Math.random() * challengesData.length)] : null,
+                    challenge: competition.challengeMode === 'match' ? pickUniqueChallenge() : null,
                 }); 
             }
 
             const nextRound = {
                 matches: nextRoundMatches,
-                challenge: (competition.challengeMode === 'round' && challengesData.length > 0) ? challengesData[Math.floor(Math.random() * challengesData.length)] : null,
+                challenge: competition.challengeMode === 'round' ? pickUniqueChallenge() : null,
             };
 
             const newBracket = { ...competition.bracket };
@@ -798,7 +813,8 @@
             await updateDoc(competitionRef, { 
                 bracket: JSON.stringify(newBracket), 
                 currentRound: competition.currentRound + 1,
-                isRoundComplete: false 
+                isRoundComplete: false,
+                usedChallengeIds: usedChallengeIds
             });
         }
         
