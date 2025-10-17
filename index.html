@@ -143,11 +143,26 @@
                                 <p class="text-gray-500">Carregando desafios...</p>
                             </div>
 
-                            <div class="mt-4 bg-gray-50 p-3 rounded-md">
-                                <label class="flex items-center cursor-pointer">
-                                    <input type="checkbox" id="randomize-per-match" class="h-4 w-4 mr-2">
-                                    <span class="text-sm font-medium text-gray-700">Sortear um desafio diferente para cada partida</span>
-                                </label>
+                            <div class="mt-4 bg-gray-50 p-3 rounded-md space-y-2">
+                                <p class="text-sm font-medium text-gray-700">Modo de Sorteio de Desafios:</p>
+                                <div>
+                                    <label class="flex items-center cursor-pointer">
+                                        <input type="radio" name="challenge-mode" value="competition" class="h-4 w-4 mr-2" checked>
+                                        <span class="text-sm text-gray-700">Um desafio para toda a competição</span>
+                                    </label>
+                                </div>
+                                <div>
+                                    <label class="flex items-center cursor-pointer">
+                                        <input type="radio" name="challenge-mode" value="round" class="h-4 w-4 mr-2">
+                                        <span class="text-sm text-gray-700">Sortear um novo desafio a cada rodada</span>
+                                    </label>
+                                </div>
+                                <div>
+                                    <label class="flex items-center cursor-pointer">
+                                        <input type="radio" name="challenge-mode" value="match" class="h-4 w-4 mr-2">
+                                        <span class="text-sm text-gray-700">Sortear um desafio diferente para cada partida</span>
+                                    </label>
+                                </div>
                             </div>
 
                             <button id="create-bracket-btn" class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 mt-4 text-lg font-bold">Criar Competição e Chaveamento</button>
@@ -187,14 +202,14 @@
                 <div class="bg-white p-6 rounded-lg shadow-md">
                     <h2 class="text-2xl font-semibold mb-4 border-b pb-2">Instruções</h2>
                     <div class="space-y-4 text-gray-700">
-                        <p><strong>Aba "Desafios":</strong> Cadastre todas as peças que poderão ser usadas na competição. Preencha nome, material, massa, volume e, opcionalmente, envie um arquivo SolidWorks.</p>
+                        <p><strong>Aba "Desafios":</strong> Cadastre todas as peças que poderão ser usadas na competição.</p>
                         <p><strong>Aba "Competição":</strong></p>
-                        <p>1. Selecione os competidores. Para formar duplas/equipes, digite o mesmo nome de equipe para os membros.</p>
+                        <p>1. Selecione os competidores e forme as equipes.</p>
                         <p>2. Dê um nome para a competição.</p>
                         <p>3. Marque os desafios que servirão como base para o sorteio.</p>
-                        <p>4. **Opcional:** Marque a caixa para sortear um desafio diferente para cada partida. Se não marcar, um único desafio será sorteado para todos.</p>
+                        <p>4. **Escolha o Modo de Sorteio:** Defina se o desafio será único, por rodada ou por partida.</p>
                         <p>5. Clique em "Criar Competição" e depois em "Iniciar".</p>
-                        <p><strong>Simulação:</strong> O botão "Simular Competição" automatiza todo o processo com dados de teste para verificar o fluxo completo do sistema.</p>
+                        <p><strong>Simulação:</strong> O botão "Simular Competição" automatiza todo o processo para testes.</p>
                     </div>
                 </div>
             </div>
@@ -490,7 +505,7 @@
             const selectedChallengesIds = Array.from(document.querySelectorAll('.challenge-checkbox:checked')).map(cb => cb.dataset.id);
             if(selectedChallengesIds.length === 0) { alert("Selecione pelo menos um desafio para o sorteio."); return; }
             
-            const randomizePerMatch = document.getElementById('randomize-per-match').checked;
+            const challengeMode = document.querySelector('input[name="challenge-mode"]:checked').value;
 
             const challengesSnapshot = await getDocs(query(collection(db, "challenges"), where(documentId(), "in", selectedChallengesIds)));
             const challengesData = challengesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -500,23 +515,28 @@
             if (teams.length < 2) { alert("É necessário ter pelo menos duas equipes/competidores distintos."); return; }
 
             const shuffledTeams = teams.sort(() => 0.5 - Math.random());
-            const firstRound = [];
+            const firstRoundMatches = [];
             for (let i = 0; i < shuffledTeams.length; i += 2) {
-                firstRound.push({ 
-                    id: `r1m${firstRound.length + 1}`, 
+                firstRoundMatches.push({ 
+                    id: `r1m${firstRoundMatches.length + 1}`, 
                     team1: shuffledTeams[i], 
                     team2: shuffledTeams[i + 1] || null, 
                     winner: null, 
                     submission: null,
-                    challenge: randomizePerMatch ? challengesData[Math.floor(Math.random() * challengesData.length)] : null,
+                    challenge: challengeMode === 'match' ? challengesData[Math.floor(Math.random() * challengesData.length)] : null,
                 });
             }
+
+            const firstRound = {
+                matches: firstRoundMatches,
+                challenge: challengeMode === 'round' ? challengesData[Math.floor(Math.random() * challengesData.length)] : null,
+            };
             
             const competitionData = { 
                 name: competitionName, 
-                challenge: randomizePerMatch ? null : challengesData[Math.floor(Math.random() * challengesData.length)],
+                challenge: challengeMode === 'competition' ? challengesData[Math.floor(Math.random() * challengesData.length)] : null,
                 challengePool: selectedChallengesIds,
-                randomizePerMatch: randomizePerMatch,
+                challengeMode: challengeMode,
                 status: 'ready', 
                 currentRound: 0, 
                 participants: selectedUsers, 
@@ -546,25 +566,27 @@
                 const myTeam = competition.teams.find(t => t.members.some(m => m.uid === currentUser.uid));
                 if (!myTeam) return;
                 
-                const currentRoundMatches = competition.bracket.rounds[competition.currentRound - 1] || [];
+                const currentRoundData = competition.bracket.rounds[competition.currentRound - 1];
+                const currentRoundMatches = currentRoundData?.matches || [];
                 const myMatch = currentRoundMatches.find(m => (m.team1 && m.team1.name === myTeam.name) || (m.team2 && m.team2.name === myTeam.name));
                 
                 if (competition.status === 'active' && myMatch && !myMatch.winner) {
                     let challenge = null;
-                    if (competition.randomizePerMatch) {
-                        challenge = myMatch.challenge; // Se for aleatório, desafio VEM da partida
-                    } else {
-                        challenge = competition.challenge; // Senão, vem da competição
+                    if (competition.challengeMode === 'match') {
+                        challenge = myMatch.challenge; 
+                    } else if (competition.challengeMode === 'round') {
+                        challenge = currentRoundData.challenge;
+                    } else { 
+                        challenge = competition.challenge;
                     }
 
                     if (!challenge) { 
-                        console.error("Desafio não pôde ser determinado para a partida!", {random: competition.randomizePerMatch, match: myMatch});
+                        console.error("Desafio não pôde ser determinado para a partida!", {challengeMode: competition.challengeMode, match: myMatch});
                         waitingDiv.classList.remove('hidden');
                         challengeDiv.classList.add('hidden');
                         return; 
                     }
                     
-                    // Limpa o estado da tela para o novo desafio
                     document.getElementById('answer-status').textContent = '';
                     document.getElementById('user-mass').value = '';
                     document.getElementById('user-volume').value = '';
@@ -615,14 +637,17 @@
             const myTeam = competition.teams.find(t => t.members.some(m => m.uid === currentUser.uid));
             if(!myTeam) return;
             const currentRoundIndex = competition.currentRound - 1;
-            if (currentRoundIndex < 0 || !competition.bracket.rounds[currentRoundIndex]) return;
+            const currentRoundData = competition.bracket.rounds[currentRoundIndex];
+            if (currentRoundIndex < 0 || !currentRoundData) return;
 
-            const myMatch = competition.bracket.rounds[currentRoundIndex].find(m => (m.team1?.name === myTeam.name) || (m.team2?.name === myTeam.name));
+            const myMatch = currentRoundData.matches.find(m => (m.team1?.name === myTeam.name) || (m.team2?.name === myTeam.name));
             if (!myMatch || myMatch.winner) { statusDiv.textContent = "Partida não está ativa."; return; }
 
             let challenge = null;
-            if (competition.randomizePerMatch) {
+            if (competition.challengeMode === 'match') {
                 challenge = myMatch.challenge;
+            } else if (competition.challengeMode === 'round') {
+                challenge = currentRoundData.challenge;
             } else {
                 challenge = competition.challenge;
             }
@@ -638,9 +663,9 @@
                 statusDiv.className = "mt-4 font-semibold text-green-600";
                 
                 const updatedMatch = { ...myMatch, winner: myTeam, submission: { by: userProfile.name, mass, volume, time: new Date() } };
-                const updatedRound = competition.bracket.rounds[currentRoundIndex].map(m => m.id === updatedMatch.id ? updatedMatch : m);
+                const updatedRoundMatches = currentRoundData.matches.map(m => m.id === updatedMatch.id ? updatedMatch : m);
                 const newBracket = { ...competition.bracket };
-                newBracket.rounds[currentRoundIndex] = updatedRound;
+                newBracket.rounds[currentRoundIndex].matches = updatedRoundMatches;
                 
                 await updateDoc(doc(db, "competitions", competition.id), { bracket: JSON.stringify(newBracket) });
                 await checkRoundCompletion(competition.id);
@@ -657,26 +682,32 @@
                 competition.bracket = JSON.parse(competition.bracket);
             }
             const currentRound = competition.bracket.rounds[competition.currentRound - 1];
-            if (currentRound.every(match => match.winner || !match.team2)) {
-                const winners = currentRound.map(match => match.winner).filter(Boolean);
+            if (currentRound.matches.every(match => match.winner || !match.team2)) {
+                const winners = currentRound.matches.map(match => match.winner).filter(Boolean);
                 if (winners.length > 1) {
                     let challengesData = [];
-                    if (competition.randomizePerMatch && competition.challengePool?.length > 0) {
+                    if ((competition.challengeMode === 'round' || competition.challengeMode === 'match') && competition.challengePool?.length > 0) {
                         const challengesSnapshot = await getDocs(query(collection(db, "challenges"), where(documentId(), "in", competition.challengePool)));
                         challengesData = challengesSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
                     }
 
-                    const nextRound = [];
+                    const nextRoundMatches = [];
                     for (let i = 0; i < winners.length; i += 2) { 
-                        nextRound.push({ 
-                            id: `r${competition.currentRound + 1}m${nextRound.length + 1}`, 
+                        nextRoundMatches.push({ 
+                            id: `r${competition.currentRound + 1}m${nextRoundMatches.length + 1}`, 
                             team1: winners[i], 
                             team2: winners[i + 1] || null, 
                             winner: null, 
                             submission: null,
-                            challenge: (competition.randomizePerMatch && challengesData.length > 0) ? challengesData[Math.floor(Math.random() * challengesData.length)] : null,
+                            challenge: (competition.challengeMode === 'match' && challengesData.length > 0) ? challengesData[Math.floor(Math.random() * challengesData.length)] : null,
                         }); 
                     }
+
+                    const nextRound = {
+                        matches: nextRoundMatches,
+                        challenge: (competition.challengeMode === 'round' && challengesData.length > 0) ? challengesData[Math.floor(Math.random() * challengesData.length)] : null,
+                    };
+
                     const newBracket = { ...competition.bracket };
                     newBracket.rounds.push(nextRound);
                     await updateDoc(competitionRef, { bracket: JSON.stringify(newBracket), currentRound: competition.currentRound + 1 });
@@ -712,7 +743,14 @@
                 if((roundIndex + 1) === competition.currentRound) { roundTitle.innerHTML += ' <span class="text-sm bg-blue-500 text-white px-2 py-1 rounded-full align-middle">Ativa</span>'; }
                 roundDiv.appendChild(roundTitle);
 
-                round.forEach(match => {
+                if (competition.challengeMode === 'round' && round.challenge) {
+                    const roundChallengeDiv = document.createElement('div');
+                    roundChallengeDiv.className = 'text-center text-sm text-gray-600 mb-2 pb-2 border-b';
+                    roundChallengeDiv.textContent = `Desafio da Rodada: ${round.challenge.name}`;
+                    roundDiv.appendChild(roundChallengeDiv);
+                }
+
+                round.matches.forEach(match => {
                     const matchContainer = document.createElement('div');
                     matchContainer.className = 'p-3 border-b last:border-b-0';
 
@@ -737,7 +775,7 @@
                     }
                     matchContainer.appendChild(matchDiv);
 
-                    if (competition.randomizePerMatch) {
+                    if (competition.challengeMode === 'match') {
                         const challengeNameDiv = document.createElement('div');
                         challengeNameDiv.className = 'text-center text-xs text-blue-700 mt-2 italic';
                         const challengeForMatch = match.challenge || {};
@@ -772,7 +810,7 @@
             generateTestUsers();
             document.getElementById('competition-name').value = "Competição de Simulação";
             document.querySelectorAll('.challenge-checkbox').forEach(cb => cb.checked = true);
-            document.getElementById('randomize-per-match').checked = true;
+            document.querySelector('input[name="challenge-mode"][value="round"]').checked = true;
             
             await document.getElementById('create-bracket-btn').click();
 
@@ -808,7 +846,7 @@
             while (competition.status === 'active') {
                 simulationStatusDiv.textContent = `Simulação: Rodada ${competition.currentRound}...`;
                 const currentRoundIndex = competition.currentRound - 1;
-                const matchesToPlay = competition.bracket.rounds[currentRoundIndex].filter(m => !m.winner && m.team2);
+                const matchesToPlay = competition.bracket.rounds[currentRoundIndex].matches.filter(m => !m.winner && m.team2);
 
                 for (const match of matchesToPlay) {
                     await delay(Math.random() * 2000 + 1000); // Espera entre 1 e 3 segundos
@@ -818,8 +856,8 @@
                     
                     let currentBracket = JSON.parse((await getDoc(competitionRef)).data().bracket);
                     let roundToUpdate = currentBracket.rounds[currentRoundIndex];
-                    const matchIndex = roundToUpdate.findIndex(m => m.id === match.id);
-                    roundToUpdate[matchIndex] = updatedMatch;
+                    const matchIndex = roundToUpdate.matches.findIndex(m => m.id === match.id);
+                    roundToUpdate.matches[matchIndex] = updatedMatch;
                     
                     await updateDoc(competitionRef, { bracket: JSON.stringify(currentBracket) });
                     await checkRoundCompletion(competitionId);
@@ -833,7 +871,7 @@
                 }
             }
 
-            const finalWinner = competition.bracket.rounds[competition.bracket.rounds.length - 1][0].winner;
+            const finalWinner = competition.bracket.rounds[competition.bracket.rounds.length - 1].matches[0].winner;
             simulationStatusDiv.textContent = `Simulação Concluída! Vencedor: ${finalWinner.name}`;
         }
 
