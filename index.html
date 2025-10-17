@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Competição SolidWorks</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .hidden { display: none; }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* Estilos para abas ativas e inativas */
+        .tab-active {
+            border-bottom-width: 2px;
+            --tw-border-opacity: 1;
+            border-color: rgba(59, 130, 246, var(--tw-border-opacity));
+            --tw-text-opacity: 1;
+            color: rgba(37, 99, 235, var(--tw-text-opacity));
+        }
+        .tab-inactive {
+            border-color: transparent;
+             --tw-text-opacity: 1;
+            color: rgba(107, 114, 128, var(--tw-text-opacity));
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div id="app-container" class="container mx-auto p-4 md:p-8 max-w-7xl">
+
+        <!-- Tela de Carregamento Inicial -->
+        <div id="loading-view" class="flex flex-col items-center justify-center h-screen">
+            <div class="loader"></div>
+            <p class="mt-4 text-lg text-gray-600">Carregando sistema...</p>
+        </div>
+
+        <!-- Tela de Login -->
+        <div id="login-view" class="hidden max-w-md mx-auto mt-10">
+            <div class="bg-white p-8 rounded-lg shadow-lg">
+                <h2 class="text-2xl font-bold text-center mb-6">Login - Competição SolidWorks</h2>
+                <div id="login-error" class="text-red-500 text-center mb-4"></div>
+                <form id="login-form">
+                    <div class="mb-4">
+                        <label for="login-email" class="block text-gray-700 mb-2">Email</label>
+                        <input type="email" id="login-email" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                    </div>
+                    <div class="mb-6">
+                        <label for="login-password" class="block text-gray-700 mb-2">Senha</label>
+                        <input type="password" id="login-password" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                    </div>
+                    <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition duration-300">Entrar</button>
+                </form>
+                <p class="text-center mt-4">
+                    Não tem uma conta? <a href="#" id="show-register" class="text-blue-600 hover:underline">Cadastre-se</a>
+                </p>
+            </div>
+        </div>
+
+        <!-- Tela de Cadastro -->
+        <div id="register-view" class="hidden max-w-md mx-auto mt-10">
+            <div class="bg-white p-8 rounded-lg shadow-lg">
+                <h2 class="text-2xl font-bold text-center mb-6">Cadastro de Competidor</h2>
+                 <div id="register-error" class="text-red-500 text-center mb-4"></div>
+                <form id="register-form">
+                    <div class="mb-4">
+                        <label for="register-name" class="block text-gray-700 mb-2">Nome Completo</label>
+                        <input type="text" id="register-name" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                    </div>
+                    <div class="mb-4">
+                        <label for="register-email" class="block text-gray-700 mb-2">Email</label>
+                        <input type="email" id="register-email" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                    </div>
+                    <div class="mb-6">
+                        <label for="register-password" class="block text-gray-700 mb-2">Senha</label>
+                        <input type="password" id="register-password" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                    </div>
+                    <button type="submit" class="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition duration-300">Cadastrar</button>
+                </form>
+                <p class="text-center mt-4">
+                    Já tem uma conta? <a href="#" id="show-login" class="text-blue-600 hover:underline">Faça Login</a>
+                </p>
+            </div>
+        </div>
+
+        <!-- Painel do Administrador -->
+        <div id="admin-dashboard-view" class="hidden">
+            <header class="flex justify-between items-center bg-white p-4 rounded-lg shadow-md mb-8">
+                <div>
+                    <h1 class="text-3xl font-bold">Painel do Administrador</h1>
+                    <p id="admin-welcome" class="text-gray-600">Bem-vindo, Admin!</p>
+                </div>
+                <button id="admin-logout-btn" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600">Sair</button>
+            </header>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-md">
+                    <!-- Abas de Navegação -->
+                    <div class="border-b border-gray-200">
+                        <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                            <button id="tab-competition" class="tab-btn tab-active whitespace-nowrap py-4 px-1 font-medium text-sm">
+                                Competição
+                            </button>
+                            <button id="tab-challenges" class="tab-btn tab-inactive whitespace-nowrap py-4 px-1 font-medium text-sm hover:text-gray-700 hover:border-gray-300">
+                                Desafios
+                            </button>
+                        </nav>
+                    </div>
+
+                    <!-- Conteúdo das Abas -->
+                    <div id="content-competition" class="mt-6">
+                        <!-- Seção para criar competição -->
+                        <div id="create-competition-section">
+                            <h3 class="text-xl font-medium mb-2">1. Selecionar Competidores</h3>
+                            <div class="flex items-center space-x-2 mb-2">
+                                <button id="generate-test-users-btn" class="text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded-md hover:bg-blue-200 transition-colors">Gerar Dados de Teste</button>
+                                <button id="load-real-users-btn" class="text-sm bg-gray-200 px-3 py-1 rounded-md hover:bg-gray-300 transition-colors">Carregar Usuários Reais</button>
+                                <button id="simulate-competition-btn" class="text-sm bg-purple-100 text-purple-800 px-3 py-1 rounded-md hover:bg-purple-200 transition-colors">Simular Competição</button>
+                            </div>
+                            <div class="my-2">
+                                <input type="text" id="user-search-input" placeholder="Buscar competidor..." class="w-full p-2 border rounded-md">
+                            </div>
+                            <div id="users-list" class="space-y-2 max-h-60 overflow-y-auto border p-3 rounded-md mb-4">
+                                <p class="text-gray-500">Carregando usuários...</p>
+                            </div>
+                            
+                            <h3 class="text-xl font-medium mb-2">2. Detalhes da Competição</h3>
+                            <input type="text" id="competition-name" placeholder="Nome da Competição" class="w-full p-2 border rounded-md mb-4">
+
+                            <h3 class="text-xl font-medium mb-2">3. Selecionar Desafios para Sorteio</h3>
+                            <div id="challenges-selection-list" class="space-y-2 max-h-40 overflow-y-auto border p-3 rounded-md mb-4">
+                                <p class="text-gray-500">Carregando desafios...</p>
+                            </div>
+
+                            <div class="mt-4 bg-gray-50 p-3 rounded-md">
+                                <label class="flex items-center cursor-pointer">
+                                    <input type="checkbox" id="randomize-per-match" class="h-4 w-4 mr-2">
+                                    <span class="text-sm font-medium text-gray-700">Sortear um desafio diferente para cada partida</span>
+                                </label>
+                            </div>
+
+                            <button id="create-bracket-btn" class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 mt-4 text-lg font-bold">Criar Competição e Chaveamento</button>
+                        </div>
+                        <!-- Seção para gerenciar competição ativa -->
+                        <div id="active-competition-section" class="hidden">
+                             <div class="flex justify-between items-center">
+                                <h3 class="text-xl font-medium mb-2" id="active-competition-title">Competição Ativa</h3>
+                                <div id="simulation-status" class="text-purple-600 font-semibold"></div>
+                            </div>
+                            <p id="active-competition-status" class="text-lg font-semibold text-green-600 mb-4"></p>
+                            <div id="admin-bracket-view" class="space-y-4"></div>
+                            <button id="start-competition-btn" class="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 mt-4">Iniciar Competição</button>
+                            <button id="end-competition-btn" class="w-full bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 mt-2">Finalizar Competição</button>
+                        </div>
+                    </div>
+                    <div id="content-challenges" class="hidden mt-6">
+                        <h3 class="text-xl font-medium mb-2">Adicionar Novo Desafio</h3>
+                        <div class="space-y-3 p-4 border rounded-lg bg-gray-50">
+                            <input type="text" id="challenge-name" placeholder="Nome do Desafio" class="w-full p-2 border rounded-md">
+                            <input type="text" id="challenge-material" placeholder="Material (ex: Aço 1020)" class="w-full p-2 border rounded-md">
+                            <input type="number" step="any" id="challenge-mass" placeholder="Massa Correta (ex: 1234.56)" class="w-full p-2 border rounded-md">
+                            <input type="number" step="any" id="challenge-volume" placeholder="Volume Correto (ex: 123456.78)" class="w-full p-2 border rounded-md">
+                            <input type="file" id="challenge-file-upload" class="w-full p-2 border rounded-md bg-white">
+                            <button id="save-challenge-btn" class="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700">Salvar Desafio</button>
+                            <div id="save-challenge-status" class="text-center mt-2"></div>
+                        </div>
+
+                        <h3 class="text-xl font-medium mt-6 mb-2">Desafios Cadastrados</h3>
+                        <div id="challenges-list" class="space-y-2 max-h-96 overflow-y-auto">
+                            <p class="text-gray-500 p-4 text-center">Nenhum desafio cadastrado.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Coluna de Instruções -->
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h2 class="text-2xl font-semibold mb-4 border-b pb-2">Instruções</h2>
+                    <div class="space-y-4 text-gray-700">
+                        <p><strong>Aba "Desafios":</strong> Cadastre todas as peças que poderão ser usadas na competição. Preencha nome, material, massa, volume e, opcionalmente, envie um arquivo SolidWorks.</p>
+                        <p><strong>Aba "Competição":</strong></p>
+                        <p>1. Selecione os competidores. Para formar duplas/equipes, digite o mesmo nome de equipe para os membros.</p>
+                        <p>2. Dê um nome para a competição.</p>
+                        <p>3. Marque os desafios que servirão como base para o sorteio.</p>
+                        <p>4. **Opcional:** Marque a caixa para sortear um desafio diferente para cada partida. Se não marcar, um único desafio será sorteado para todos.</p>
+                        <p>5. Clique em "Criar Competição" e depois em "Iniciar".</p>
+                        <p><strong>Simulação:</strong> O botão "Simular Competição" automatiza todo o processo com dados de teste para verificar o fluxo completo do sistema.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Painel do Usuário -->
+        <div id="user-dashboard-view" class="hidden">
+             <header class="flex justify-between items-center bg-white p-4 rounded-lg shadow-md mb-8">
+                <div>
+                    <h1 class="text-3xl font-bold">Painel do Competidor</h1>
+                    <p id="user-welcome" class="text-gray-600">Bem-vindo, Competidor!</p>
+                </div>
+                <button id="user-logout-btn" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600">Sair</button>
+            </header>
+
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                 <div id="user-competition-status">
+                    <h2 class="text-2xl font-semibold text-center mb-6">Status da Competição</h2>
+                    <div id="waiting-for-competition" class="text-center">
+                        <div class="loader mx-auto"></div>
+                        <p class="text-xl mt-4 text-gray-600">Aguardando o administrador iniciar a competição...</p>
+                    </div>
+                    
+                    <div id="challenge-active" class="hidden text-center">
+                        <h3 id="user-challenge-name" class="text-3xl font-bold text-blue-600 mb-2">Desafio Iniciado!</h3>
+                        <p id="user-challenge-material" class="text-xl text-gray-700 font-medium mb-4"></p>
+                        <p class="text-lg mb-6">Baixe o arquivo, encontre a massa e o volume e envie sua resposta.</p>
+                        
+                        <p id="user-challenge-filename" class="text-sm text-gray-500 mb-2"></p>
+                        <a id="download-challenge-file" href="#" target="_blank" class="inline-block bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 transition duration-300 text-lg font-semibold mb-8">
+                            Baixar Arquivo do Desafio
+                        </a>
+
+                        <form id="answer-form" class="max-w-lg mx-auto">
+                             <div class="mb-4">
+                                <label for="user-mass" class="block text-gray-700 mb-2 font-medium">Massa (g)</label>
+                                <input type="number" step="any" id="user-mass" class="w-full px-4 py-2 border rounded-lg text-center text-lg" placeholder="Ex: 1234.56" required>
+                            </div>
+                            <div class="mb-6">
+                                <label for="user-volume" class="block text-gray-700 mb-2 font-medium">Volume (mm³)</label>
+                                <input type="number" step="any" id="user-volume" class="w-full px-4 py-2 border rounded-lg text-center text-lg" placeholder="Ex: 123456.78" required>
+                            </div>
+                            <button type="submit" class="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 text-xl font-bold">Enviar Resposta</button>
+                        </form>
+                         <div id="answer-status" class="mt-4 font-semibold"></div>
+                    </div>
+                 </div>
+                 
+                 <div id="user-bracket-view" class="mt-8">
+                      <h3 class="text-xl font-semibold mb-4 text-center">Chaveamento da Competição</h3>
+                      <div id="user-bracket-content" class="space-y-4"></div>
+                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Módulo JavaScript com a lógica do Firebase -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot, updateDoc, where, query, addDoc, deleteDoc, documentId } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAjRWxfyYUUpXDmFeF2Dpfiu_YSoBtLOeE",
+            authDomain: "comp-fa0ad.firebaseapp.com",
+            projectId: "comp-fa0ad",
+            storageBucket: "comp-fa0ad.firebasestorage.app",
+            messagingSenderId: "5759493529",
+            appId: "1:5759493529:web:ee1880a3276417854c5f08",
+            measurementId: "G-SGERT4HPH9"
+        };
+        
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const storage = getStorage(app);
+
+        // --- GERENCIAMENTO DE ESTADO E UI ---
+        const views = { loading: document.getElementById('loading-view'), login: document.getElementById('login-view'), register: document.getElementById('register-view'), adminDashboard: document.getElementById('admin-dashboard-view'), userDashboard: document.getElementById('user-dashboard-view'), };
+        let currentUser = null; let userProfile = null; let competitionUnsubscribe = null;
+        function showView(viewName) { Object.values(views).forEach(view => view.classList.add('hidden')); if (views[viewName]) { views[viewName].classList.remove('hidden'); } }
+        
+        // --- AUTENTICAÇÃO ---
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                currentUser = user;
+                const userDoc = await getDoc(doc(db, "users", user.uid));
+                if (userDoc.exists()) {
+                    userProfile = { uid: user.uid, ...userDoc.data() };
+                    if (userProfile.isAdmin) { showView('adminDashboard'); loadAdminDashboard(); } else { showView('userDashboard'); loadUserDashboard(); }
+                } else {
+                    console.log("Usuário não encontrado no Firestore, redirecionando para login.");
+                    signOut(auth);
+                }
+            } else { currentUser = null; userProfile = null; if(competitionUnsubscribe) competitionUnsubscribe(); showView('login'); }
+        });
+        document.getElementById('login-form').addEventListener('submit', async (e) => { e.preventDefault(); try { await signInWithEmailAndPassword(auth, document.getElementById('login-email').value, document.getElementById('login-password').value); document.getElementById('login-error').textContent = ''; } catch (error) { document.getElementById('login-error').textContent = "Email ou senha inválidos."; } });
+        document.getElementById('register-form').addEventListener('submit', async (e) => { e.preventDefault(); try { const userCredential = await createUserWithEmailAndPassword(auth, document.getElementById('register-email').value, document.getElementById('register-password').value); await setDoc(doc(db, "users", userCredential.user.uid), { name: document.getElementById('register-name').value, email: document.getElementById('register-email').value, isAdmin: false }); document.getElementById('register-error').textContent = ''; } catch (error) { document.getElementById('register-error').textContent = "Erro ao cadastrar. Tente outro email."; } });
+        document.getElementById('show-register').addEventListener('click', () => showView('register'));
+        document.getElementById('show-login').addEventListener('click', () => showView('login'));
+        document.getElementById('admin-logout-btn').addEventListener('click', () => signOut(auth));
+        document.getElementById('user-logout-btn').addEventListener('click', () => signOut(auth));
+
+        // --- LÓGICA DO PAINEL DE ADMIN ---
+        function setupAdminTabs() {
+            const tabs = { competition: document.getElementById('tab-competition'), challenges: document.getElementById('tab-challenges') };
+            const contents = { competition: document.getElementById('content-competition'), challenges: document.getElementById('content-challenges') };
+            
+            Object.keys(tabs).forEach(tabKey => {
+                tabs[tabKey].addEventListener('click', () => {
+                    Object.values(tabs).forEach(t => { t.classList.remove('tab-active'); t.classList.add('tab-inactive'); });
+                    Object.values(contents).forEach(c => c.classList.add('hidden'));
+                    tabs[tabKey].classList.add('tab-active');
+                    tabs[tabKey].classList.remove('tab-inactive');
+                    contents[tabKey].classList.remove('hidden');
+                });
+            });
+        }
+        
+        async function loadAdminDashboard() {
+            document.getElementById('admin-welcome').textContent = `Bem-vindo, ${userProfile.name}!`;
+            setupAdminTabs();
+            loadUsersForCompetition();
+            loadChallenges();
+            listenForActiveCompetition();
+
+            document.getElementById('generate-test-users-btn').addEventListener('click', generateTestUsers);
+            document.getElementById('load-real-users-btn').addEventListener('click', loadUsersForCompetition);
+            document.getElementById('simulate-competition-btn').addEventListener('click', simulateCompetition);
+
+            document.getElementById('user-search-input').addEventListener('input', (e) => {
+                const searchTerm = e.target.value.toLowerCase();
+                document.querySelectorAll('#users-list .user-list-item').forEach(item => {
+                    const userName = item.querySelector('label').textContent.toLowerCase();
+                    if (userName.includes(searchTerm)) {
+                        item.style.display = 'flex';
+                    } else {
+                        item.style.display = 'none';
+                    }
+                });
+            });
+        }
+
+        function generateTestUsers() {
+            const usersListDiv = document.getElementById('users-list');
+            usersListDiv.innerHTML = '';
+            const testUsers = [
+                { uid: 'test-uid-1', name: 'Alice Braga', team: 'Dupla 1' }, { uid: 'test-uid-2', name: 'Bruno Alves', team: 'Dupla 1' },
+                { uid: 'test-uid-3', name: 'Carla Dias', team: 'Dupla 2' }, { uid: 'test-uid-4', name: 'Daniel Costa', team: 'Dupla 2' },
+                { uid: 'test-uid-5', name: 'Eduarda Lima', team: '' }, { uid: 'test-uid-6', name: 'Felipe Melo', team: '' },
+                { uid: 'test-uid-7', name: 'Gabriela Nogueira', team: 'Dupla 4' }, { uid: 'test-uid-8', name: 'Heitor Rocha', team: 'Dupla 4' },
+            ];
+            testUsers.forEach(user => {
+                usersListDiv.innerHTML += `
+                    <div class="user-list-item flex items-center justify-between p-2 border rounded-md bg-blue-50">
+                        <label class="flex items-center">
+                            <input type="checkbox" data-uid="${user.uid}" data-name="${user.name}" class="mr-2 user-checkbox h-4 w-4" checked>
+                            ${user.name} <span class="text-xs text-blue-600 ml-2">(teste)</span>
+                        </label>
+                        <input type="text" placeholder="Equipe (opcional)" class="team-name-input p-1 border rounded-md w-1/3" value="${user.team}">
+                    </div>`;
+            });
+        }
+
+        async function loadUsersForCompetition() {
+            const usersListDiv = document.getElementById('users-list');
+            usersListDiv.innerHTML = '<p class="text-gray-500">Carregando usuários...</p>';
+            try {
+                const usersSnapshot = await getDocs(collection(db, "users"));
+                usersListDiv.innerHTML = '';
+                if (usersSnapshot.empty) {
+                    usersListDiv.innerHTML = '<p class="text-gray-500">Nenhum usuário cadastrado.</p>';
+                    return;
+                }
+                usersSnapshot.forEach(userDoc => {
+                    if(!userDoc.data().isAdmin){
+                        usersListDiv.innerHTML += `<div class="user-list-item flex items-center justify-between p-2 border rounded-md"><label class="flex items-center"><input type="checkbox" data-uid="${userDoc.id}" data-name="${userDoc.data().name}" class="mr-2 user-checkbox h-4 w-4">${userDoc.data().name}</label><input type="text" placeholder="Equipe (opcional)" class="team-name-input p-1 border rounded-md w-1/3"></div>`;
+                    }
+                });
+            } catch (error) { console.error("Erro ao carregar usuários:", error); usersListDiv.innerHTML = '<p class="text-red-500">Erro ao carregar usuários.</p>'; }
+        }
+
+        async function loadChallenges() {
+            const challengesListDiv = document.getElementById('challenges-list');
+            const challengesSelectionDiv = document.getElementById('challenges-selection-list');
+            const challengesSnapshot = await getDocs(collection(db, "challenges"));
+            
+            challengesListDiv.innerHTML = ''; challengesSelectionDiv.innerHTML = '';
+            
+            if(challengesSnapshot.empty){
+                challengesListDiv.innerHTML = '<p class="text-gray-500 p-4 text-center">Nenhum desafio cadastrado.</p>';
+                challengesSelectionDiv.innerHTML = '<p class="text-gray-500">Cadastre desafios na aba "Desafios".</p>';
+                return;
+            }
+
+            challengesSnapshot.forEach(doc => {
+                const challenge = { id: doc.id, ...doc.data() };
+                challengesListDiv.innerHTML += `<div class="flex items-center justify-between p-3 border rounded-md bg-white"><div><p class="font-semibold">${challenge.name}</p><p class="text-sm text-gray-600">Material: <span class="font-medium">${challenge.material || 'N/A'}</span></p><p class="text-sm text-gray-500">Massa: ${challenge.correctMass}g | Volume: ${challenge.correctVolume}mm³</p></div><button data-id="${challenge.id}" data-file-url="${challenge.fileUrl}" class="delete-challenge-btn bg-red-100 text-red-700 px-3 py-1 rounded-md text-sm hover:bg-red-200">Excluir</button></div>`;
+                challengesSelectionDiv.innerHTML += `<label class="flex items-center p-2 border rounded-md hover:bg-gray-50"><input type="checkbox" data-id="${challenge.id}" class="mr-3 h-4 w-4 challenge-checkbox">${challenge.name}</label>`;
+            });
+
+            document.querySelectorAll('.delete-challenge-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const id = e.target.dataset.id; const fileUrl = e.target.dataset.fileUrl;
+                    if(confirm('Tem certeza que deseja excluir este desafio?')){
+                        await deleteDoc(doc(db, "challenges", id));
+                        if(fileUrl && fileUrl !== 'null') {
+                            const fileRef = ref(storage, fileUrl);
+                            await deleteObject(fileRef).catch(err => console.error("Erro ao deletar arquivo:", err));
+                        }
+                        loadChallenges();
+                    }
+                });
+            });
+        }
+        
+        function listenForActiveCompetition() {
+            const q = query(collection(db, "competitions"), where("status", "!=", "finished"));
+            if (competitionUnsubscribe) competitionUnsubscribe();
+            competitionUnsubscribe = onSnapshot(q, (snapshot) => {
+                if(!snapshot.empty) {
+                    const competitionDoc = snapshot.docs[0];
+                    const competition = { id: competitionDoc.id, ...competitionDoc.data() };
+                    if (competition.bracket && typeof competition.bracket === 'string') {
+                        competition.bracket = JSON.parse(competition.bracket);
+                    }
+                    displayActiveCompetition(competition);
+                } else {
+                    document.getElementById('simulation-status').textContent = '';
+                    displayCreateCompetition();
+                }
+            }, (error) => { console.error("Erro no listener da competição:", error); });
+        }
+
+        function displayCreateCompetition() { document.getElementById('create-competition-section').classList.remove('hidden'); document.getElementById('active-competition-section').classList.add('hidden'); }
+        
+        function displayActiveCompetition(competition) {
+            document.getElementById('create-competition-section').classList.add('hidden');
+            document.getElementById('active-competition-section').classList.remove('hidden');
+            document.getElementById('active-competition-title').textContent = `Ativa: ${competition.name}`;
+            document.getElementById('active-competition-status').textContent = `Status: ${competition.status.toUpperCase()}`;
+            renderBracket(document.getElementById('admin-bracket-view'), competition, true);
+            const startBtn = document.getElementById('start-competition-btn');
+            startBtn.disabled = competition.status !== 'ready';
+            startBtn.onclick = () => updateDoc(doc(db, "competitions", competition.id), { status: 'active', currentRound: 1 });
+            document.getElementById('end-competition-btn').onclick = async () => { await updateDoc(doc(db, "competitions", competition.id), { status: 'finished' }); }
+        }
+        
+        document.getElementById('save-challenge-btn').addEventListener('click', async () => {
+             const file = document.getElementById('challenge-file-upload').files[0];
+             const name = document.getElementById('challenge-name').value;
+             const material = document.getElementById('challenge-material').value;
+             const mass = document.getElementById('challenge-mass').value;
+             const volume = document.getElementById('challenge-volume').value;
+             if(!name || !mass || !volume || !material) { alert('Preencha todos os campos obrigatórios (nome, material, massa e volume).'); return; }
+             
+             const statusDiv = document.getElementById('save-challenge-status');
+             statusDiv.textContent = 'Salvando desafio...';
+             
+             try {
+                let downloadURL = null;
+                if (file) {
+                    statusDiv.textContent = 'Enviando arquivo...';
+                    const storageRef = ref(storage, `challenges/${Date.now()}_${file.name}`);
+                    await uploadBytes(storageRef, file);
+                    downloadURL = await getDownloadURL(storageRef);
+                }
+                
+                await addDoc(collection(db, "challenges"), { name, material, correctMass: parseFloat(mass), correctVolume: parseFloat(volume), fileUrl: downloadURL });
+                statusDiv.textContent = 'Desafio salvo com sucesso!';
+                setTimeout(() => statusDiv.textContent = '', 3000);
+                document.getElementById('challenge-name').value = ''; 
+                document.getElementById('challenge-material').value = ''; 
+                document.getElementById('challenge-mass').value = ''; 
+                document.getElementById('challenge-volume').value = ''; 
+                document.getElementById('challenge-file-upload').value = '';
+                loadChallenges();
+             } catch(error) { statusDiv.textContent = 'Erro ao salvar desafio.'; console.error("Save challenge error:", error); }
+        });
+
+        document.getElementById('create-bracket-btn').addEventListener('click', async () => {
+            const selectedUsers = [];
+            document.querySelectorAll('.user-checkbox:checked').forEach((checkbox) => {
+                const teamNameInput = checkbox.closest('.justify-between').querySelector('.team-name-input');
+                selectedUsers.push({ uid: checkbox.dataset.uid, name: checkbox.dataset.name, team: teamNameInput.value.trim() || checkbox.dataset.name });
+            });
+            if (selectedUsers.length < 2) { alert("Selecione pelo menos 2 competidores."); return; }
+
+            const competitionName = document.getElementById('competition-name').value;
+            if(!competitionName) { alert("Dê um nome à competição."); return; }
+
+            const selectedChallengesIds = Array.from(document.querySelectorAll('.challenge-checkbox:checked')).map(cb => cb.dataset.id);
+            if(selectedChallengesIds.length === 0) { alert("Selecione pelo menos um desafio para o sorteio."); return; }
+            
+            const randomizePerMatch = document.getElementById('randomize-per-match').checked;
+
+            const challengesSnapshot = await getDocs(query(collection(db, "challenges"), where(documentId(), "in", selectedChallengesIds)));
+            const challengesData = challengesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            if (challengesData.length === 0) { alert("Erro: nenhum dos desafios selecionados foi encontrado."); return; }
+
+            const teams = Object.values(selectedUsers.reduce((acc, user) => { if (!acc[user.team]) { acc[user.team] = { name: user.team, members: [] }; } acc[user.team].members.push({ uid: user.uid, name: user.name }); return acc; }, {}));
+            if (teams.length < 2) { alert("É necessário ter pelo menos duas equipes/competidores distintos."); return; }
+
+            const shuffledTeams = teams.sort(() => 0.5 - Math.random());
+            const firstRound = [];
+            for (let i = 0; i < shuffledTeams.length; i += 2) {
+                firstRound.push({ 
+                    id: `r1m${firstRound.length + 1}`, 
+                    team1: shuffledTeams[i], 
+                    team2: shuffledTeams[i + 1] || null, 
+                    winner: null, 
+                    submission: null,
+                    challenge: randomizePerMatch ? challengesData[Math.floor(Math.random() * challengesData.length)] : null,
+                });
+            }
+            
+            const competitionData = { 
+                name: competitionName, 
+                challenge: randomizePerMatch ? null : challengesData[Math.floor(Math.random() * challengesData.length)],
+                challengePool: selectedChallengesIds,
+                randomizePerMatch: randomizePerMatch,
+                status: 'ready', 
+                currentRound: 0, 
+                participants: selectedUsers, 
+                teams: teams, 
+                bracket: JSON.stringify({ rounds: [firstRound] }), 
+                createdAt: new Date() 
+            };
+            await addDoc(collection(db, "competitions"), competitionData);
+            alert("Competição criada com sucesso!");
+        });
+
+        // --- LÓGICA DO PAINEL DO USUÁRIO ---
+        function loadUserDashboard() {
+            document.getElementById('user-welcome').textContent = `Bem-vindo, ${userProfile.name}!`;
+            const q = query(collection(db, "competitions"), where("status", "!=", "finished"));
+            if (competitionUnsubscribe) competitionUnsubscribe();
+            competitionUnsubscribe = onSnapshot(q, (snapshot) => {
+                const waitingDiv = document.getElementById('waiting-for-competition');
+                const challengeDiv = document.getElementById('challenge-active');
+                if (snapshot.empty) { waitingDiv.classList.remove('hidden'); challengeDiv.classList.add('hidden'); document.getElementById('user-bracket-content').innerHTML = '<p class="text-center text-gray-500">Nenhuma competição ativa.</p>'; return; }
+                
+                const competition = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+                if (competition.bracket && typeof competition.bracket === 'string') {
+                    competition.bracket = JSON.parse(competition.bracket);
+                }
+                renderBracket(document.getElementById('user-bracket-content'), competition, false);
+                const myTeam = competition.teams.find(t => t.members.some(m => m.uid === currentUser.uid));
+                if (!myTeam) return;
+                
+                const currentRoundMatches = competition.bracket.rounds[competition.currentRound - 1] || [];
+                const myMatch = currentRoundMatches.find(m => (m.team1 && m.team1.name === myTeam.name) || (m.team2 && m.team2.name === myTeam.name));
+                
+                if (competition.status === 'active' && myMatch && !myMatch.winner) {
+                    const challenge = myMatch.challenge || competition.challenge;
+                    if (!challenge) { console.error("Desafio não encontrado para a partida!"); return; }
+
+                    waitingDiv.classList.add('hidden'); challengeDiv.classList.remove('hidden');
+                    document.getElementById('user-challenge-name').textContent = `Desafio: ${challenge.name}`;
+                    document.getElementById('user-challenge-material').textContent = `Material: ${challenge.material || 'Não especificado'}`;
+
+                    const downloadButton = document.getElementById('download-challenge-file');
+                    const challengeInstructions = document.querySelector('#challenge-active .text-lg.mb-6');
+                    const fileNameDisplay = document.getElementById('user-challenge-filename');
+
+                    if (challenge.fileUrl) {
+                        downloadButton.href = challenge.fileUrl;
+                        downloadButton.classList.remove('hidden');
+                        const fileName = getFileNameFromUrl(challenge.fileUrl);
+                        fileNameDisplay.textContent = `Arquivo: ${fileName}`;
+                        fileNameDisplay.classList.remove('hidden');
+                        challengeInstructions.textContent = 'Baixe o arquivo, encontre a massa e o volume e envie sua resposta.';
+                    } else {
+                        downloadButton.classList.add('hidden');
+                        fileNameDisplay.classList.add('hidden');
+                        challengeInstructions.textContent = 'Encontre a massa e o volume do desafio e envie sua resposta. Não há arquivo para este desafio.';
+                    }
+                } else {
+                    waitingDiv.classList.remove('hidden'); challengeDiv.classList.add('hidden');
+                }
+            });
+        }
+        
+        document.getElementById('answer-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const mass = parseFloat(document.getElementById('user-mass').value);
+            const volume = parseFloat(document.getElementById('user-volume').value);
+            const statusDiv = document.getElementById('answer-status');
+            statusDiv.textContent = "Enviando...";
+            
+            const q = query(collection(db, "competitions"), where("status", "==", "active"));
+            const snapshot = await getDocs(q);
+            if (snapshot.empty) return;
+            const competition = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+            if (competition.bracket && typeof competition.bracket === 'string') {
+                competition.bracket = JSON.parse(competition.bracket);
+            }
+            
+            const myTeam = competition.teams.find(t => t.members.some(m => m.uid === currentUser.uid));
+            if(!myTeam) return;
+            const currentRoundIndex = competition.currentRound - 1;
+            if (currentRoundIndex < 0 || !competition.bracket.rounds[currentRoundIndex]) return;
+
+            const myMatch = competition.bracket.rounds[currentRoundIndex].find(m => (m.team1?.name === myTeam.name) || (m.team2?.name === myTeam.name));
+            if (!myMatch || myMatch.winner) { statusDiv.textContent = "Partida não está ativa."; return; }
+
+            const challenge = myMatch.challenge || competition.challenge;
+            if (!challenge) { statusDiv.textContent = "Erro: desafio da partida não encontrado."; return; }
+
+            const isCorrect = (mass === challenge.correctMass && volume === challenge.correctVolume);
+            if (isCorrect) {
+                statusDiv.textContent = "Resposta Correta! Você venceu!";
+                statusDiv.className = "mt-4 font-semibold text-green-600";
+                
+                const updatedMatch = { ...myMatch, winner: myTeam, submission: { by: userProfile.name, mass, volume, time: new Date() } };
+                const updatedRound = competition.bracket.rounds[currentRoundIndex].map(m => m.id === updatedMatch.id ? updatedMatch : m);
+                const newBracket = { ...competition.bracket };
+                newBracket.rounds[currentRoundIndex] = updatedRound;
+                
+                await updateDoc(doc(db, "competitions", competition.id), { bracket: JSON.stringify(newBracket) });
+                await checkRoundCompletion(competition.id);
+            } else { statusDiv.textContent = "Resposta Incorreta."; statusDiv.className = "mt-4 font-semibold text-red-600"; }
+        });
+
+        async function checkRoundCompletion(competitionId) {
+            const competitionRef = doc(db, "competitions", competitionId);
+            const competitionDoc = await getDoc(competitionRef);
+            if (!competitionDoc.exists()) return;
+            
+            let competition = competitionDoc.data();
+            if (competition.bracket && typeof competition.bracket === 'string') {
+                competition.bracket = JSON.parse(competition.bracket);
+            }
+            const currentRound = competition.bracket.rounds[competition.currentRound - 1];
+            if (currentRound.every(match => match.winner || !match.team2)) {
+                const winners = currentRound.map(match => match.winner).filter(Boolean);
+                if (winners.length > 1) {
+                    let challengesData = [];
+                    if (competition.randomizePerMatch && competition.challengePool?.length > 0) {
+                        const challengesSnapshot = await getDocs(query(collection(db, "challenges"), where(documentId(), "in", competition.challengePool)));
+                        challengesData = challengesSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                    }
+
+                    const nextRound = [];
+                    for (let i = 0; i < winners.length; i += 2) { 
+                        nextRound.push({ 
+                            id: `r${competition.currentRound + 1}m${nextRound.length + 1}`, 
+                            team1: winners[i], 
+                            team2: winners[i + 1] || null, 
+                            winner: null, 
+                            submission: null,
+                            challenge: (competition.randomizePerMatch && challengesData.length > 0) ? challengesData[Math.floor(Math.random() * challengesData.length)] : null,
+                        }); 
+                    }
+                    const newBracket = { ...competition.bracket };
+                    newBracket.rounds.push(nextRound);
+                    await updateDoc(competitionRef, { bracket: JSON.stringify(newBracket), currentRound: competition.currentRound + 1 });
+                } else { await updateDoc(competitionRef, { status: "finished" }); }
+            }
+        }
+        
+        function getFileNameFromUrl(url) {
+            if (!url) return 'Nenhum arquivo';
+            try {
+                const decodedUrl = decodeURIComponent(url);
+                const path = decodedUrl.split('?')[0];
+                const fileNameWithFolder = path.split('/').pop();
+                // O nome do arquivo é salvo como timestamp_nomedoarquivo.ext
+                const fileName = fileNameWithFolder.substring(fileNameWithFolder.indexOf('_') + 1);
+                return fileName;
+            } catch (e) {
+                console.error("Erro ao extrair nome do arquivo da URL:", e);
+                return 'Nome de arquivo indisponível';
+            }
+        }
+
+        function renderBracket(container, competition, isAdminView = false) {
+            container.innerHTML = '';
+            const bracket = competition.bracket;
+            if (!bracket || !bracket.rounds) return;
+            bracket.rounds.forEach((round, roundIndex) => {
+                const roundDiv = document.createElement('div');
+                roundDiv.className = 'mb-6 p-4 border rounded-lg bg-gray-50';
+                const roundTitle = document.createElement('h4');
+                roundTitle.className = 'text-lg font-semibold mb-3 text-center';
+                roundTitle.textContent = `Rodada ${roundIndex + 1}`;
+                if((roundIndex + 1) === competition.currentRound) { roundTitle.innerHTML += ' <span class="text-sm bg-blue-500 text-white px-2 py-1 rounded-full align-middle">Ativa</span>'; }
+                roundDiv.appendChild(roundTitle);
+
+                round.forEach(match => {
+                    const matchContainer = document.createElement('div');
+                    matchContainer.className = 'p-3 border-b last:border-b-0';
+
+                    const matchDiv = document.createElement('div');
+                    matchDiv.className = 'flex items-center justify-center';
+                    
+                    const team1Div = createTeamDiv(match.team1, match.winner);
+                    const vsSpan = document.createElement('span');
+                    vsSpan.className = 'mx-4 font-bold text-gray-500';
+                    vsSpan.textContent = 'VS';
+                    const team2Div = createTeamDiv(match.team2, match.winner);
+                    
+                    matchDiv.appendChild(team1Div);
+                    if(match.team2) { 
+                        matchDiv.appendChild(vsSpan); 
+                        matchDiv.appendChild(team2Div); 
+                    } else { 
+                        const woDiv = document.createElement('div'); 
+                        woDiv.className = 'flex-1 text-center text-gray-400 italic'; 
+                        woDiv.textContent = '(Avanço automático)'; 
+                        matchDiv.appendChild(woDiv); 
+                    }
+                    matchContainer.appendChild(matchDiv);
+
+                    if (competition.randomizePerMatch) {
+                        const challengeNameDiv = document.createElement('div');
+                        challengeNameDiv.className = 'text-center text-xs text-blue-700 mt-2 italic';
+                        const challengeForMatch = match.challenge || {};
+                        challengeNameDiv.textContent = `Desafio: ${challengeForMatch.name || 'A ser sorteado'}`;
+                        matchContainer.appendChild(challengeNameDiv);
+                    }
+                    roundDiv.appendChild(matchContainer);
+                });
+                container.appendChild(roundDiv);
+            });
+        }
+        function createTeamDiv(team, winner) {
+            const div = document.createElement('div');
+            div.className = 'flex-1 text-center p-2 rounded-md transition-all duration-300';
+            if (!team) { div.textContent = 'A definir'; div.className += ' bg-gray-200 text-gray-500'; return div; }
+            div.textContent = team.name;
+            if (winner && winner.name === team.name) { div.className += ' bg-green-500 text-white font-bold'; }
+            else if (winner) { div.className += ' bg-red-200 text-red-800 opacity-60'; }
+            else { div.className += ' bg-gray-200'; }
+            return div;
+        }
+
+        // --- SIMULAÇÃO ---
+        const delay = ms => new Promise(res => setTimeout(res, ms));
+        
+        async function simulateCompetition() {
+            if (document.getElementById('active-competition-section').offsetParent !== null) {
+                alert('Uma competição já está ativa. Finalize-a antes de iniciar uma simulação.');
+                return;
+            }
+            
+            generateTestUsers();
+            document.getElementById('competition-name').value = "Competição de Simulação";
+            document.querySelectorAll('.challenge-checkbox').forEach(cb => cb.checked = true);
+            document.getElementById('randomize-per-match').checked = true;
+            
+            await document.getElementById('create-bracket-btn').click();
+
+            const simulationStatusDiv = document.getElementById('simulation-status');
+            simulationStatusDiv.textContent = 'Simulação: Iniciando...';
+
+            await delay(2000); // Espera a competição ser criada
+            
+            const q = query(collection(db, "competitions"), where("status", "==", "ready"));
+            const snapshot = await getDocs(q);
+            if (snapshot.empty) {
+                simulationStatusDiv.textContent = 'Falha ao criar simulação.';
+                return;
+            }
+            const competitionId = snapshot.docs[0].id;
+            await updateDoc(doc(db, "competitions", competitionId), { status: 'active', currentRound: 1 });
+            
+            runSimulation(competitionId);
+        }
+
+        async function runSimulation(competitionId) {
+            const competitionRef = doc(db, "competitions", competitionId);
+            const simulationStatusDiv = document.getElementById('simulation-status');
+
+            let competitionDoc = await getDoc(competitionRef);
+            if (!competitionDoc.exists()) return;
+
+            let competition = { id: competitionDoc.id, ...competitionDoc.data() };
+            if (competition.bracket && typeof competition.bracket === 'string') {
+                competition.bracket = JSON.parse(competition.bracket);
+            }
+            
+            while (competition.status === 'active') {
+                simulationStatusDiv.textContent = `Simulação: Rodada ${competition.currentRound}...`;
+                const currentRoundIndex = competition.currentRound - 1;
+                const matchesToPlay = competition.bracket.rounds[currentRoundIndex].filter(m => !m.winner && m.team2);
+
+                for (const match of matchesToPlay) {
+                    await delay(Math.random() * 2000 + 1000); // Espera entre 1 e 3 segundos
+                    
+                    const winner = Math.random() < 0.5 ? match.team1 : match.team2;
+                    const updatedMatch = { ...match, winner, submission: { by: 'Simulação', time: new Date() } };
+                    
+                    let currentBracket = JSON.parse((await getDoc(competitionRef)).data().bracket);
+                    let roundToUpdate = currentBracket.rounds[currentRoundIndex];
+                    const matchIndex = roundToUpdate.findIndex(m => m.id === match.id);
+                    roundToUpdate[matchIndex] = updatedMatch;
+                    
+                    await updateDoc(competitionRef, { bracket: JSON.stringify(currentBracket) });
+                    await checkRoundCompletion(competitionId);
+                }
+
+                await delay(1000); // Pequena pausa entre as rodadas
+                competitionDoc = await getDoc(competitionRef);
+                competition = { id: competitionDoc.id, ...competitionDoc.data() };
+                if (competition.bracket && typeof competition.bracket === 'string') {
+                    competition.bracket = JSON.parse(competition.bracket);
+                }
+            }
+
+            const finalWinner = competition.bracket.rounds[competition.bracket.rounds.length - 1][0].winner;
+            simulationStatusDiv.textContent = `Simulação Concluída! Vencedor: ${finalWinner.name}`;
+        }
+
+
+        // --- INICIALIZAÇÃO ---
+        showView('loading');
+
+    </script>
+</body>
+</html>
+
