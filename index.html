@@ -848,7 +848,11 @@
                     roundChallengeDiv.textContent = `Desafio da Rodada: ${round.challenge.name}`;
                     roundDiv.appendChild(roundChallengeDiv);
                 }
-
+                
+                if (!round.matches) {
+                    console.error("Rodada malformada no chaveamento, pulando:", round);
+                    return; // Equivalente a 'continue' para o forEach
+                }
                 round.matches.forEach(match => {
                     const matchContainer = document.createElement('div');
                     matchContainer.className = 'p-3 border-b last:border-b-0';
