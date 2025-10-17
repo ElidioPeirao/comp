@@ -550,10 +550,27 @@
                 const myMatch = currentRoundMatches.find(m => (m.team1 && m.team1.name === myTeam.name) || (m.team2 && m.team2.name === myTeam.name));
                 
                 if (competition.status === 'active' && myMatch && !myMatch.winner) {
-                    const challenge = myMatch.challenge || competition.challenge;
-                    if (!challenge) { console.error("Desafio não encontrado para a partida!"); return; }
+                    let challenge = null;
+                    if (competition.randomizePerMatch) {
+                        challenge = myMatch.challenge; // Se for aleatório, desafio VEM da partida
+                    } else {
+                        challenge = competition.challenge; // Senão, vem da competição
+                    }
 
-                    waitingDiv.classList.add('hidden'); challengeDiv.classList.remove('hidden');
+                    if (!challenge) { 
+                        console.error("Desafio não pôde ser determinado para a partida!", {random: competition.randomizePerMatch, match: myMatch});
+                        waitingDiv.classList.remove('hidden');
+                        challengeDiv.classList.add('hidden');
+                        return; 
+                    }
+                    
+                    // Limpa o estado da tela para o novo desafio
+                    document.getElementById('answer-status').textContent = '';
+                    document.getElementById('user-mass').value = '';
+                    document.getElementById('user-volume').value = '';
+
+                    waitingDiv.classList.add('hidden'); 
+                    challengeDiv.classList.remove('hidden');
                     document.getElementById('user-challenge-name').textContent = `Desafio: ${challenge.name}`;
                     document.getElementById('user-challenge-material').textContent = `Material: ${challenge.material || 'Não especificado'}`;
 
@@ -574,7 +591,8 @@
                         challengeInstructions.textContent = 'Encontre a massa e o volume do desafio e envie sua resposta. Não há arquivo para este desafio.';
                     }
                 } else {
-                    waitingDiv.classList.remove('hidden'); challengeDiv.classList.add('hidden');
+                    waitingDiv.classList.remove('hidden'); 
+                    challengeDiv.classList.add('hidden');
                 }
             });
         }
@@ -602,8 +620,17 @@
             const myMatch = competition.bracket.rounds[currentRoundIndex].find(m => (m.team1?.name === myTeam.name) || (m.team2?.name === myTeam.name));
             if (!myMatch || myMatch.winner) { statusDiv.textContent = "Partida não está ativa."; return; }
 
-            const challenge = myMatch.challenge || competition.challenge;
-            if (!challenge) { statusDiv.textContent = "Erro: desafio da partida não encontrado."; return; }
+            let challenge = null;
+            if (competition.randomizePerMatch) {
+                challenge = myMatch.challenge;
+            } else {
+                challenge = competition.challenge;
+            }
+
+            if (!challenge) { 
+                statusDiv.textContent = "Erro: desafio da partida não encontrado."; 
+                return; 
+            }
 
             const isCorrect = (mass === challenge.correctMass && volume === challenge.correctVolume);
             if (isCorrect) {
