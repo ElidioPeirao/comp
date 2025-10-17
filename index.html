@@ -176,6 +176,7 @@
                             <p id="active-competition-status" class="text-lg font-semibold text-green-600 mb-4"></p>
                             <div id="admin-bracket-view" class="space-y-4"></div>
                             <button id="start-competition-btn" class="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 mt-4">Iniciar Competição</button>
+                            <button id="next-round-btn" class="hidden w-full bg-yellow-500 text-white py-2 rounded-lg hover:bg-yellow-600 mt-4">Avançar para Próxima Rodada</button>
                             <button id="end-competition-btn" class="w-full bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 mt-2">Finalizar Competição</button>
                         </div>
                     </div>
@@ -209,6 +210,7 @@
                         <p>3. Marque os desafios que servirão como base para o sorteio.</p>
                         <p>4. **Escolha o Modo de Sorteio:** Defina se o desafio será único, por rodada ou por partida.</p>
                         <p>5. Clique em "Criar Competição" e depois em "Iniciar".</p>
+                        <p>6. Após uma rodada ser concluída, clique em "Avançar para Próxima Rodada" para continuar.</p>
                         <p><strong>Simulação:</strong> O botão "Simular Competição" automatiza todo o processo para testes.</p>
                     </div>
                 </div>
@@ -255,6 +257,12 @@
                             <button type="submit" class="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 text-xl font-bold">Enviar Resposta</button>
                         </form>
                          <div id="answer-status" class="mt-4 font-semibold"></div>
+                    </div>
+
+                    <div id="finished-view" class="hidden text-center">
+                        <h3 id="finished-title" class="text-4xl font-bold text-gray-800 mb-4"></h3>
+                        <p id="finished-subtitle" class="text-xl text-gray-600"></p>
+                        <p class="mt-8 text-gray-500">Aguarde o administrador finalizar ou iniciar uma nova competição.</p>
                     </div>
                  </div>
                  
@@ -451,11 +459,31 @@
             document.getElementById('create-competition-section').classList.add('hidden');
             document.getElementById('active-competition-section').classList.remove('hidden');
             document.getElementById('active-competition-title').textContent = `Ativa: ${competition.name}`;
+            
+            const startBtn = document.getElementById('start-competition-btn');
+            const nextRoundBtn = document.getElementById('next-round-btn');
+            
+            startBtn.classList.add('hidden');
+            nextRoundBtn.classList.add('hidden');
+
             document.getElementById('active-competition-status').textContent = `Status: ${competition.status.toUpperCase()}`;
             renderBracket(document.getElementById('admin-bracket-view'), competition, true);
-            const startBtn = document.getElementById('start-competition-btn');
-            startBtn.disabled = competition.status !== 'ready';
-            startBtn.onclick = () => updateDoc(doc(db, "competitions", competition.id), { status: 'active', currentRound: 1 });
+            
+            if (competition.status === 'ready') {
+                startBtn.classList.remove('hidden');
+                startBtn.onclick = () => updateDoc(doc(db, "competitions", competition.id), { status: 'active', currentRound: 1 });
+            } else if (competition.status === 'active' && competition.isRoundComplete) {
+                const currentRound = competition.bracket.rounds[competition.currentRound - 1];
+                const winners = currentRound.matches.map(match => match.winner).filter(Boolean);
+                if (winners.length > 1) {
+                    nextRoundBtn.classList.remove('hidden');
+                    nextRoundBtn.onclick = () => advanceToNextRound(competition);
+                }
+            } else if (competition.status === 'finished') {
+                const finalWinner = competition.bracket.rounds[competition.bracket.rounds.length - 1].matches[0].winner;
+                document.getElementById('active-competition-status').innerHTML = `Status: FINALIZADO <br> Vencedor: <span class="font-bold text-yellow-500">${finalWinner.name}</span>`;
+            }
+
             document.getElementById('end-competition-btn').onclick = async () => { await updateDoc(doc(db, "competitions", competition.id), { status: 'finished' }); }
         }
         
@@ -538,6 +566,7 @@
                 challengePool: selectedChallengesIds,
                 challengeMode: challengeMode,
                 status: 'ready', 
+                isRoundComplete: false,
                 currentRound: 0, 
                 participants: selectedUsers, 
                 teams: teams, 
@@ -552,16 +581,36 @@
         function loadUserDashboard() {
             document.getElementById('user-welcome').textContent = `Bem-vindo, ${userProfile.name}!`;
             const q = query(collection(db, "competitions"), where("status", "!=", "finished"));
+            
             if (competitionUnsubscribe) competitionUnsubscribe();
-            competitionUnsubscribe = onSnapshot(q, (snapshot) => {
+
+            const finishedQuery = query(collection(db, "competitions"), where("status", "==", "finished"));
+            
+            // Listener para competições ativas
+            const activeUnsubscribe = onSnapshot(q, (snapshot) => {
                 const waitingDiv = document.getElementById('waiting-for-competition');
                 const challengeDiv = document.getElementById('challenge-active');
-                if (snapshot.empty) { waitingDiv.classList.remove('hidden'); challengeDiv.classList.add('hidden'); document.getElementById('user-bracket-content').innerHTML = '<p class="text-center text-gray-500">Nenhuma competição ativa.</p>'; return; }
+                const finishedView = document.getElementById('finished-view');
+
+                if (snapshot.empty) {
+                    // Se não há competição ativa, checamos se há alguma finalizada
+                    getDocs(finishedQuery).then(finishedSnapshot => {
+                        if (finishedSnapshot.empty) {
+                             waitingDiv.classList.remove('hidden'); 
+                             challengeDiv.classList.add('hidden'); 
+                             finishedView.classList.add('hidden');
+                             document.getElementById('user-bracket-content').innerHTML = '<p class="text-center text-gray-500">Nenhuma competição ativa.</p>';
+                        }
+                    });
+                    return; 
+                }
                 
                 const competition = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
                 if (competition.bracket && typeof competition.bracket === 'string') {
                     competition.bracket = JSON.parse(competition.bracket);
                 }
+                
+                finishedView.classList.add('hidden'); // Esconde a tela de finalizado se uma competição estiver ativa
                 renderBracket(document.getElementById('user-bracket-content'), competition, false);
                 const myTeam = competition.teams.find(t => t.members.some(m => m.uid === currentUser.uid));
                 if (!myTeam) return;
@@ -572,13 +621,9 @@
                 
                 if (competition.status === 'active' && myMatch && !myMatch.winner) {
                     let challenge = null;
-                    if (competition.challengeMode === 'match') {
-                        challenge = myMatch.challenge; 
-                    } else if (competition.challengeMode === 'round') {
-                        challenge = currentRoundData.challenge;
-                    } else { 
-                        challenge = competition.challenge;
-                    }
+                    if (competition.challengeMode === 'match') { challenge = myMatch.challenge; } 
+                    else if (competition.challengeMode === 'round') { challenge = currentRoundData.challenge; } 
+                    else { challenge = competition.challenge; }
 
                     if (!challenge) { 
                         console.error("Desafio não pôde ser determinado para a partida!", {challengeMode: competition.challengeMode, match: myMatch});
@@ -603,8 +648,7 @@
                     if (challenge.fileUrl) {
                         downloadButton.href = challenge.fileUrl;
                         downloadButton.classList.remove('hidden');
-                        const fileName = getFileNameFromUrl(challenge.fileUrl);
-                        fileNameDisplay.textContent = `Arquivo: ${fileName}`;
+                        fileNameDisplay.textContent = `Arquivo: ${getFileNameFromUrl(challenge.fileUrl)}`;
                         fileNameDisplay.classList.remove('hidden');
                         challengeInstructions.textContent = 'Baixe o arquivo, encontre a massa e o volume e envie sua resposta.';
                     } else {
@@ -617,6 +661,42 @@
                     challengeDiv.classList.add('hidden');
                 }
             });
+
+            // Listener para competições finalizadas
+            const finishedUnsubscribe = onSnapshot(finishedQuery, (snapshot) => {
+                 if (!snapshot.empty) {
+                    const competition = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+                    if (competition.bracket && typeof competition.bracket === 'string') {
+                        competition.bracket = JSON.parse(competition.bracket);
+                    }
+                    
+                    const myTeam = competition.teams.find(t => t.members.some(m => m.uid === currentUser.uid));
+                    const finalWinner = competition.bracket.rounds[competition.bracket.rounds.length - 1].matches[0].winner;
+
+                    document.getElementById('waiting-for-competition').classList.add('hidden');
+                    document.getElementById('challenge-active').classList.add('hidden');
+                    document.getElementById('finished-view').classList.remove('hidden');
+                    
+                    const finishedTitle = document.getElementById('finished-title');
+                    const finishedSubtitle = document.getElementById('finished-subtitle');
+
+                    if (myTeam && finalWinner && myTeam.name === finalWinner.name) {
+                        finishedTitle.textContent = '🏆 Parabéns, Campeões! 🏆';
+                        finishedSubtitle.textContent = 'Vocês venceram a competição!';
+                        finishedTitle.className = 'text-4xl font-bold text-yellow-500 mb-4';
+                    } else {
+                        finishedTitle.textContent = 'Competição Finalizada!';
+                        finishedSubtitle.textContent = `O vencedor foi ${finalWinner.name}.`;
+                        finishedTitle.className = 'text-4xl font-bold text-gray-800 mb-4';
+                    }
+                    renderBracket(document.getElementById('user-bracket-content'), competition, false);
+                 }
+            });
+
+            competitionUnsubscribe = () => {
+                activeUnsubscribe();
+                finishedUnsubscribe();
+            };
         }
         
         document.getElementById('answer-form').addEventListener('submit', async (e) => {
@@ -644,18 +724,11 @@
             if (!myMatch || myMatch.winner) { statusDiv.textContent = "Partida não está ativa."; return; }
 
             let challenge = null;
-            if (competition.challengeMode === 'match') {
-                challenge = myMatch.challenge;
-            } else if (competition.challengeMode === 'round') {
-                challenge = currentRoundData.challenge;
-            } else {
-                challenge = competition.challenge;
-            }
+            if (competition.challengeMode === 'match') { challenge = myMatch.challenge; } 
+            else if (competition.challengeMode === 'round') { challenge = currentRoundData.challenge; } 
+            else { challenge = competition.challenge; }
 
-            if (!challenge) { 
-                statusDiv.textContent = "Erro: desafio da partida não encontrado."; 
-                return; 
-            }
+            if (!challenge) { statusDiv.textContent = "Erro: desafio da partida não encontrado."; return; }
 
             const isCorrect = (mass === challenge.correctMass && volume === challenge.correctVolume);
             if (isCorrect) {
@@ -685,34 +758,48 @@
             if (currentRound.matches.every(match => match.winner || !match.team2)) {
                 const winners = currentRound.matches.map(match => match.winner).filter(Boolean);
                 if (winners.length > 1) {
-                    let challengesData = [];
-                    if ((competition.challengeMode === 'round' || competition.challengeMode === 'match') && competition.challengePool?.length > 0) {
-                        const challengesSnapshot = await getDocs(query(collection(db, "challenges"), where(documentId(), "in", competition.challengePool)));
-                        challengesData = challengesSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-                    }
-
-                    const nextRoundMatches = [];
-                    for (let i = 0; i < winners.length; i += 2) { 
-                        nextRoundMatches.push({ 
-                            id: `r${competition.currentRound + 1}m${nextRoundMatches.length + 1}`, 
-                            team1: winners[i], 
-                            team2: winners[i + 1] || null, 
-                            winner: null, 
-                            submission: null,
-                            challenge: (competition.challengeMode === 'match' && challengesData.length > 0) ? challengesData[Math.floor(Math.random() * challengesData.length)] : null,
-                        }); 
-                    }
-
-                    const nextRound = {
-                        matches: nextRoundMatches,
-                        challenge: (competition.challengeMode === 'round' && challengesData.length > 0) ? challengesData[Math.floor(Math.random() * challengesData.length)] : null,
-                    };
-
-                    const newBracket = { ...competition.bracket };
-                    newBracket.rounds.push(nextRound);
-                    await updateDoc(competitionRef, { bracket: JSON.stringify(newBracket), currentRound: competition.currentRound + 1 });
-                } else { await updateDoc(competitionRef, { status: "finished" }); }
+                    await updateDoc(competitionRef, { isRoundComplete: true });
+                } else { 
+                    await updateDoc(competitionRef, { status: "finished", isRoundComplete: false }); 
+                }
             }
+        }
+
+        async function advanceToNextRound(competition) {
+            const competitionRef = doc(db, "competitions", competition.id);
+            const currentRound = competition.bracket.rounds[competition.currentRound - 1];
+            const winners = currentRound.matches.map(match => match.winner).filter(Boolean);
+            
+            let challengesData = [];
+            if ((competition.challengeMode === 'round' || competition.challengeMode === 'match') && competition.challengePool?.length > 0) {
+                const challengesSnapshot = await getDocs(query(collection(db, "challenges"), where(documentId(), "in", competition.challengePool)));
+                challengesData = challengesSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+            }
+
+            const nextRoundMatches = [];
+            for (let i = 0; i < winners.length; i += 2) { 
+                nextRoundMatches.push({ 
+                    id: `r${competition.currentRound + 1}m${nextRoundMatches.length + 1}`, 
+                    team1: winners[i], 
+                    team2: winners[i + 1] || null, 
+                    winner: null, 
+                    submission: null,
+                    challenge: (competition.challengeMode === 'match' && challengesData.length > 0) ? challengesData[Math.floor(Math.random() * challengesData.length)] : null,
+                }); 
+            }
+
+            const nextRound = {
+                matches: nextRoundMatches,
+                challenge: (competition.challengeMode === 'round' && challengesData.length > 0) ? challengesData[Math.floor(Math.random() * challengesData.length)] : null,
+            };
+
+            const newBracket = { ...competition.bracket };
+            newBracket.rounds.push(nextRound);
+            await updateDoc(competitionRef, { 
+                bracket: JSON.stringify(newBracket), 
+                currentRound: competition.currentRound + 1,
+                isRoundComplete: false 
+            });
         }
         
         function getFileNameFromUrl(url) {
@@ -721,13 +808,9 @@
                 const decodedUrl = decodeURIComponent(url);
                 const path = decodedUrl.split('?')[0];
                 const fileNameWithFolder = path.split('/').pop();
-                // O nome do arquivo é salvo como timestamp_nomedoarquivo.ext
                 const fileName = fileNameWithFolder.substring(fileNameWithFolder.indexOf('_') + 1);
                 return fileName;
-            } catch (e) {
-                console.error("Erro ao extrair nome do arquivo da URL:", e);
-                return 'Nome de arquivo indisponível';
-            }
+            } catch (e) { console.error("Erro ao extrair nome do arquivo da URL:", e); return 'Nome de arquivo indisponível'; }
         }
 
         function renderBracket(container, competition, isAdminView = false) {
@@ -740,7 +823,7 @@
                 const roundTitle = document.createElement('h4');
                 roundTitle.className = 'text-lg font-semibold mb-3 text-center';
                 roundTitle.textContent = `Rodada ${roundIndex + 1}`;
-                if((roundIndex + 1) === competition.currentRound) { roundTitle.innerHTML += ' <span class="text-sm bg-blue-500 text-white px-2 py-1 rounded-full align-middle">Ativa</span>'; }
+                if((roundIndex + 1) === competition.currentRound && competition.status === 'active') { roundTitle.innerHTML += ' <span class="text-sm bg-blue-500 text-white px-2 py-1 rounded-full align-middle">Ativa</span>'; }
                 roundDiv.appendChild(roundTitle);
 
                 if (competition.challengeMode === 'round' && round.challenge) {
@@ -817,7 +900,7 @@
             const simulationStatusDiv = document.getElementById('simulation-status');
             simulationStatusDiv.textContent = 'Simulação: Iniciando...';
 
-            await delay(2000); // Espera a competição ser criada
+            await delay(2000); 
             
             const q = query(collection(db, "competitions"), where("status", "==", "ready"));
             const snapshot = await getDocs(q);
@@ -838,7 +921,7 @@
             let competitionDoc = await getDoc(competitionRef);
             if (!competitionDoc.exists()) return;
 
-            let competition = { id: competitionDoc.id, ...competitionDoc.data() };
+            let competition = { id: competitionId, ...competitionDoc.data() };
             if (competition.bracket && typeof competition.bracket === 'string') {
                 competition.bracket = JSON.parse(competition.bracket);
             }
@@ -849,28 +932,40 @@
                 const matchesToPlay = competition.bracket.rounds[currentRoundIndex].matches.filter(m => !m.winner && m.team2);
 
                 for (const match of matchesToPlay) {
-                    await delay(Math.random() * 2000 + 1000); // Espera entre 1 e 3 segundos
+                    await delay(Math.random() * 1000 + 500); 
                     
                     const winner = Math.random() < 0.5 ? match.team1 : match.team2;
-                    const updatedMatch = { ...match, winner, submission: { by: 'Simulação', time: new Date() } };
                     
-                    let currentBracket = JSON.parse((await getDoc(competitionRef)).data().bracket);
+                    let currentCompDoc = await getDoc(competitionRef);
+                    let currentBracket = JSON.parse(currentCompDoc.data().bracket);
                     let roundToUpdate = currentBracket.rounds[currentRoundIndex];
                     const matchIndex = roundToUpdate.matches.findIndex(m => m.id === match.id);
-                    roundToUpdate.matches[matchIndex] = updatedMatch;
+                    
+                    roundToUpdate.matches[matchIndex] = { ...match, winner, submission: { by: 'Simulação', time: new Date() } };
                     
                     await updateDoc(competitionRef, { bracket: JSON.stringify(currentBracket) });
                     await checkRoundCompletion(competitionId);
                 }
+                
+                await delay(1000);
+                let updatedCompDoc = await getDoc(competitionRef);
+                let updatedCompetition = { id: competitionId, ...updatedCompDoc.data() };
+                if (updatedCompetition.isRoundComplete) {
+                     if (updatedCompetition.bracket && typeof updatedCompetition.bracket === 'string') {
+                        updatedCompetition.bracket = JSON.parse(updatedCompetition.bracket);
+                    }
+                    simulationStatusDiv.textContent = `Simulação: Avançando para a próxima rodada...`;
+                    await advanceToNextRound(updatedCompetition);
+                    await delay(1000);
+                }
 
-                await delay(1000); // Pequena pausa entre as rodadas
                 competitionDoc = await getDoc(competitionRef);
-                competition = { id: competitionDoc.id, ...competitionDoc.data() };
+                competition = { id: competitionId, ...competitionDoc.data() };
                 if (competition.bracket && typeof competition.bracket === 'string') {
                     competition.bracket = JSON.parse(competition.bracket);
                 }
             }
-
+            
             const finalWinner = competition.bracket.rounds[competition.bracket.rounds.length - 1].matches[0].winner;
             simulationStatusDiv.textContent = `Simulação Concluída! Vencedor: ${finalWinner.name}`;
         }
